@@ -84,32 +84,45 @@ function init_device() {
         reset_tray();
         return;
     }
-    device_info.full_name = `${device_info.manufacturer} ${KNOWN_PIDS[device_info.productId]}`;
-    device_hid.setNonBlocking(1);
-    device_hid.on('data', update_tray);
-    device_hid.on('error', () => {
+    // device_info.full_name = `${device_info.manufacturer} ${KNOWN_PIDS[device_info.productId]}`;
+    device_info.full_name = `${KNOWN_PIDS[device_info.productId]}`;
+    try {
+        device_hid.setNonBlocking(1);
+        device_hid.on('data', update_tray);
+        device_hid.on('error', () => {
+            reset_tray();
+            device_info = device_hid = null;
+        });
+        device_hid.resume();
+    } catch (error) {
+        console.error("Failed to setup HID device:", error);
         reset_tray();
         device_info = device_hid = null;
-    });
-    device_hid.resume();
+    }
 }
 
 function get_HID() {
-    let dList = HID.devices(), hidDevice, infoObj;
+    let dList = HID.devices();
+    let hidDevice = null, infoObj = null;
+
     for (let deviceObj of dList) {
-        if (deviceObj.vendorId !== CORSAIR_VID || KNOWN_PIDS[deviceObj.productId] === undefined)
+        if (deviceObj.vendorId !== CORSAIR_VID || !KNOWN_PIDS[deviceObj.productId]) {
             continue;
+        }
+
         try {
             hidDevice = new HID.HID(deviceObj.path);
+            // Write the initial data request to the device to verify it's the correct one
             hidDevice.write(DATA_REQ);
             hidDevice.pause();
             infoObj = deviceObj;
-            break;
-        } catch {
+            break;  // Found a matching device, exit the loop
+        } catch (error) {
+            console.error("Failed to initialize HID device:", error);
             hidDevice = infoObj = null;
-            continue;
         }
     }
+
     return [hidDevice, infoObj];
 }
 
@@ -120,13 +133,16 @@ function update_tray([, , battery, , state]) {
     let icon, tooltip;
     if (state === 0 || DEVICE_STATES[state] === undefined) { //disconnected
         icon = TRAY_ICONS["default"];
-        tooltip = `${device_info.full_name}: ${DEVICE_STATES[0]}`;
+        tooltip = `HS70 ${DEVICE_STATES[0]}`;
+        // tooltip = `${device_info.full_name}: ${DEVICE_STATES[0]}`;
     } else if (state === 5) { // charging (not full)
         icon = TRAY_ICONS["charging"];
-        tooltip = `${device_info.full_name}: ${DEVICE_STATES[state]}`;
+        tooltip = `HS70 ${DEVICE_STATES[state]}`;
+        // tooltip = `${device_info.full_name}: ${DEVICE_STATES[state]}`;
     } else {
         icon = TRAY_ICONS[Math.floor(battery / 10)];
-        tooltip = `${device_info.full_name}: ${DEVICE_STATES[state]} (${battery}%)`;
+        tooltip = `HS70 (${battery}%)`;
+        // tooltip = `${device_info.full_name}: ${DEVICE_STATES[state]} (${battery}%)`;
     }
     tray.sendAction({
         type: 'update-menu',
@@ -144,8 +160,8 @@ function reset_tray() {
         type: 'update-menu',
         menu: {
             icon: TRAY_ICONS["default"],
-            title: "Corsair battery level",
-            tooltip: "No device found",
+            title: "No Device Found",
+            // tooltip: "No device found",
             items: MENU_ITEMS
         }
     });
